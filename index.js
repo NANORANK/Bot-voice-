@@ -71,11 +71,6 @@ const leaveVC = (guild) => {
 
 // =========================== SLASH COMMANDS ===========================
 const commands = [
-  new SlashCommandBuilder().setName("setupvoice").setDescription(" ")
-    .addChannelOption(opt =>
-      opt.setName("voice").setDescription(" ").addChannelTypes(ChannelType.GuildVoice).setRequired(true)
-    ),
-
   new SlashCommandBuilder().setName("leavevoice").setDescription(" "),
 
   new SlashCommandBuilder().setName("setjoinlog").setDescription(" ")
@@ -121,12 +116,6 @@ client.on("interactionCreate", async i => {
   if (i.user.id !== ADMIN_ID)
     return i.reply({ content: "❌ ไม่อนุญาต", ephemeral: true });
 
-  if (i.commandName === "setupvoice") {
-    targetVoiceChannel = i.options.getChannel("voice");
-    await joinVC(targetVoiceChannel);
-    return i.reply(`🟢 บอทเข้าห้องเสียง <#${targetVoiceChannel.id}> แล้วค้าบ`);
-  }
-
   if (i.commandName === "leavevoice") {
     leaveVC(i.guild);
     targetVoiceChannel = null;
@@ -143,7 +132,6 @@ client.on("interactionCreate", async i => {
     return i.reply(`🟢 Log ออกเสียงใช้ <#${logLeaveChannel}>`);
   }
 
-  // CREATE SERVER STATS
   if (i.commandName === "setserver") {
     const type = i.options.getString("type");
 
@@ -181,7 +169,6 @@ client.on("interactionCreate", async i => {
 });
 
 // =========================== AUTO UPDATE EVERY 5 MIN ===========================
-
 setInterval(async () => {
   const guild = client.guilds.cache.first();
   if (!guild) return;
