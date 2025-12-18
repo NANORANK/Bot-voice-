@@ -10,10 +10,16 @@ import {
 import { REST } from "@discordjs/rest";
 import {
   joinVoiceChannel,
-  getVoiceConnection
+  getVoiceConnection,
+  entersState,
+  VoiceConnectionStatus
 } from "@discordjs/voice";
+import "@discordjs/opus"; // 👈 เพิ่ม opus encoder
+import sodium from "libsodium-wrappers"; // 👈 ตัวแก้ encryption
 import dotenv from "dotenv";
 dotenv.config();
+
+await sodium.ready; // 👈 initial sodium
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const ADMIN_ID = process.env.ADMIN_ID;
@@ -38,15 +44,20 @@ function thaiTime() {
   }).format(new Date());
 }
 
+// 🟢 FIXED JOIN
 const joinVC = async (channel) => {
   try {
-    joinVoiceChannel({
+    const connection = joinVoiceChannel({
       channelId: channel.id,
       guildId: channel.guild.id,
       adapterCreator: channel.guild.voiceAdapterCreator,
       selfDeaf: false,
-      selfMute: false
+      selfMute: false,
+      debug: false
     });
+
+    // รอให้ connection stable
+    await entersState(connection, VoiceConnectionStatus.Ready, 15_000);
     console.log(`Joined VC: ${channel.id}`);
   } catch (err) {
     console.log("VC Join error:", err.message);
@@ -70,11 +81,9 @@ const commands = [
         .addChannelTypes(ChannelType.GuildVoice)
         .setRequired(true)
     ),
-
   new SlashCommandBuilder()
     .setName("leavevoice")
     .setDescription("ให้บอทออกจากห้องเสียงทันที (เฉพาะเจ้าของ)"),
-
   new SlashCommandBuilder()
     .setName("setjoinlog")
     .setDescription("ตั้งช่องแจ้งสมาชิกเข้า VC (เฉพาะเจ้าของ)")
@@ -84,7 +93,6 @@ const commands = [
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true)
     ),
-
   new SlashCommandBuilder()
     .setName("setleavelog")
     .setDescription("ตั้งช่องแจ้งสมาชิกออก VC (เฉพาะเจ้าของ)")
@@ -95,22 +103,17 @@ const commands = [
         .setRequired(true)
     )
 ]
-.map(c => c.setDefaultMemberPermissions(PermissionFlagsBits.Administrator))
-.map(c => c.toJSON());
+  .map(c => c.setDefaultMemberPermissions(PermissionFlagsBits.Administrator))
+  .map(c => c.toJSON());
 
 client.once("ready", async () => {
   console.log(`🟢 Bot Online: ${client.user.tag}`);
-
   const rest = new REST({ version: "10" }).setToken(TOKEN);
+
   for (const [gid] of client.guilds.cache) {
     try {
-      await rest.put(
-        Routes.applicationGuildCommands(client.user.id, gid),
-        { body: commands }
-      );
-    } catch (err) {
-      console.log("Slash register error:", err.message);
-    }
+      await rest.put(Routes.applicationGuildCommands(client.user.id, gid), { body: commands });
+    } catch {}
   }
 });
 
@@ -142,15 +145,16 @@ client.on("interactionCreate", async i => {
   }
 });
 
+// ♻ Reconnect loop
 setInterval(() => {
   if (!targetVoiceChannel) return;
   const conn = getVoiceConnection(targetVoiceChannel.guild.id);
-  if (!conn) {
+  if (!conn || conn.state.status === VoiceConnectionStatus.Disconnected) {
     joinVC(targetVoiceChannel);
   }
-}, 5000);
+}, 7000);
 
-// 🔥 Voice Logs (แก้ style ตามที่สั่ง)
+// 🚀 Voice Logs — untouched
 client.on("voiceStateUpdate", (oldState, newState) => {
   const user = newState.member?.user;
   if (!user) return;
