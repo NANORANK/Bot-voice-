@@ -36,7 +36,7 @@ function thaiTime() {
 
 const joinVC = async (channel) => {
   try {
-    await channel.join(); // ใช้ native ของ discord.js
+    await channel.join();
     console.log(`Joined VC: ${channel.id}`);
   } catch (err) {
     console.log("VC Join error:", err.message);
@@ -85,8 +85,8 @@ const commands = [
         .setRequired(true)
     )
 ]
-  .map(c => c.setDefaultMemberPermissions(PermissionFlagsBits.Administrator))
-  .map(c => c.toJSON());
+.map(c => c.setDefaultMemberPermissions(PermissionFlagsBits.Administrator))
+.map(c => c.toJSON());
 
 client.once("ready", async () => {
   console.log(`🟢 Bot Online: ${client.user.tag}`);
@@ -142,19 +142,37 @@ client.on("voiceStateUpdate", (oldState, newState) => {
   const user = newState.member?.user;
   if (!user) return;
 
+  // 🟢 แจ้งเตือนเข้าห้องเสียง
   if (!oldState.channelId && newState.channelId && logJoinChannel) {
     const embed = new EmbedBuilder()
       .setColor(0x00ff00)
-      .setTitle(`# 🟢 <@${user.id}> เข้า VC แล้ว`)
-      .setDescription(`> ห้อง: <#${newState.channelId}>\n> เวลา: ${thaiTime()}`);
+      .setTitle(`# 🟢 <@${user.id}> ได้เข้าห้องเสียงแล้ว`)
+      .setThumbnail(
+        "https://cdn.discordapp.com/attachments/1449115719479590984/1451221912259923989/a64f8f38ab161df88f85f035eaa12cb7.jpg"
+      )
+      .setDescription(`
+> - <a:emoji_10:1449150901628440767> <#${newState.channelId}>
+> - <a:emoji_19:1449151254189314150> ${thaiTime()}
+> - <a:emoji_34:1450185126901321892> คุยให้สนุกนะค้าบ  
+** ╭┈ ✧ : เข้าห้องเสียง ˗ˏˋ꒰ <a:emoji_2:1449148118690959440> ꒱ **
+** ╰ ┈ ✧ :xSwift Hub 🐼 ┆ • ➵ BY Zemon Źx **`);
     client.channels.cache.get(logJoinChannel)?.send({ embeds: [embed] });
   }
 
+  // 🔴 แจ้งเตือนออกห้องเสียง
   if (oldState.channelId && !newState.channelId && logLeaveChannel) {
     const embed = new EmbedBuilder()
       .setColor(0xff0000)
-      .setTitle(`# 🔴 <@${user.id}> ออกจาก VC แล้ว`)
-      .setDescription(`> ห้อง: <#${oldState.channelId}>\n> เวลา: ${thaiTime()}`);
+      .setTitle(`# 🔴 <@${user.id}> ได้ออกห้องเสียงแล้ว`)
+      .setThumbnail(
+        "https://cdn.discordapp.com/attachments/1449115719479590984/1451221912670830612/a9b8cf03aafc0ed58b542e03d281dd2f.jpg"
+      )
+      .setDescription(`
+> - <a:emoji_10:1449150901628440767> <#${oldState.channelId}>
+> - <a:emoji_19:1449151254189314150> ${thaiTime()}
+> - <a:emoji_34:1450185126901321892> กลับมาคุยกันใหม่ได้น้า  
+** ╭┈ ✧ : ออกห้องเสียง ˗ˏˋ꒰ <a:emoji_2:1449148118690959440> ꒱ **
+** ╰ ┈ ✧ :xSwift Hub 🐼 ┆ • ➵ BY Zemon Źx **`);
     client.channels.cache.get(logLeaveChannel)?.send({ embeds: [embed] });
   }
 });
