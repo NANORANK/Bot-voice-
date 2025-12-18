@@ -2,16 +2,12 @@ import {
   Client,
   GatewayIntentBits,
   SlashCommandBuilder,
-  Routes,
   EmbedBuilder,
   PermissionFlagsBits,
-  ChannelType
+  ChannelType,
+  Routes
 } from "discord.js";
 import { REST } from "@discordjs/rest";
-import {
-  joinVoiceChannel,
-  getVoiceConnection
-} from "@discordjs/voice";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -30,12 +26,29 @@ const client = new Client({
   ]
 });
 
-const thaiTime = () =>
-  new Intl.DateTimeFormat("th-TH", {
+function thaiTime() {
+  return new Intl.DateTimeFormat("th-TH", {
     dateStyle: "medium",
     timeStyle: "medium",
     timeZone: TZ
   }).format(new Date());
+}
+
+const joinVC = async (channel) => {
+  try {
+    await channel.join(); // ใช้ native ของ discord.js
+    console.log(`Joined VC: ${channel.id}`);
+  } catch (err) {
+    console.log("VC Join error:", err.message);
+  }
+};
+
+const leaveVC = async (guild) => {
+  try {
+    const me = guild.members.me;
+    if (me.voice.channel) await me.voice.disconnect();
+  } catch {}
+};
 
 const commands = [
   new SlashCommandBuilder()
@@ -43,7 +56,7 @@ const commands = [
     .setDescription("ให้บอทเข้าห้องเสียง 24/7 แบบไม่หลุด (เฉพาะเจ้าของ)")
     .addChannelOption(opt =>
       opt.setName("voice")
-        .setDescription("เลือกห้องเสียงที่ต้องการให้บอทเข้า 24/7")
+        .setDescription("เลือกห้องเสียง")
         .addChannelTypes(ChannelType.GuildVoice)
         .setRequired(true)
     ),
@@ -54,91 +67,75 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName("setjoinlog")
-    .setDescription("ตั้งช่องแจ้งเตือนสมาชิกเข้าห้องเสียง (เฉพาะเจ้าของ)")
+    .setDescription("ตั้งช่องแจ้งสมาชิกเข้า VC (เฉพาะเจ้าของ)")
     .addChannelOption(opt =>
       opt.setName("channel")
-        .setDescription("เลือกช่องข้อความแจ้งเตือน")
+        .setDescription("เลือกช่องข้อความ")
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true)
     ),
 
   new SlashCommandBuilder()
     .setName("setleavelog")
-    .setDescription("ตั้งช่องแจ้งเตือนสมาชิกออกห้องเสียง (เฉพาะเจ้าของ)")
+    .setDescription("ตั้งช่องแจ้งสมาชิกออก VC (เฉพาะเจ้าของ)")
     .addChannelOption(opt =>
       opt.setName("channel")
-        .setDescription("เลือกช่องข้อความแจ้งเตือน")
+        .setDescription("เลือกช่องข้อความ")
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true)
     )
 ]
-  .map(cmd => cmd.setDefaultMemberPermissions(PermissionFlagsBits.Administrator))
-  .map(cmd => cmd.toJSON());
+  .map(c => c.setDefaultMemberPermissions(PermissionFlagsBits.Administrator))
+  .map(c => c.toJSON());
 
 client.once("ready", async () => {
-  console.log(`🟢 Bot online: ${client.user.tag}`);
+  console.log(`🟢 Bot Online: ${client.user.tag}`);
 
   const rest = new REST({ version: "10" }).setToken(TOKEN);
-  for (const [guildId] of client.guilds.cache) {
+  for (const [gid] of client.guilds.cache) {
     try {
       await rest.put(
-        Routes.applicationGuildCommands(client.user.id, guildId),
+        Routes.applicationGuildCommands(client.user.id, gid),
         { body: commands }
       );
-      console.log(`Slash Ready for ${guildId}`);
     } catch (err) {
-      console.error("Slash error:", err);
+      console.log("Slash register error:", err.message);
     }
   }
 });
 
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
-  if (interaction.user.id !== ADMIN_ID)
-    return interaction.reply({ content: "❌ ไม่อนุญาตนะคะ", ephemeral: true });
+client.on("interactionCreate", async i => {
+  if (!i.isChatInputCommand()) return;
+  if (i.user.id !== ADMIN_ID)
+    return i.reply({ content: "❌ ไม่อนุญาต", ephemeral: true });
 
-  if (interaction.commandName === "setupvoice") {
-    targetVoiceChannel = interaction.options.getChannel("voice");
-    joinVoiceChannel({
-      channelId: targetVoiceChannel.id,
-      guildId: interaction.guild.id,
-      adapterCreator: interaction.guild.voiceAdapterCreator,
-      selfDeaf: false,
-      selfMute: false
-    });
-    return interaction.reply(`🟢 บอทเข้าห้องเสียง <#${targetVoiceChannel.id}> แบบ 24/7 แล้ว`);
+  if (i.commandName === "setupvoice") {
+    targetVoiceChannel = i.options.getChannel("voice");
+    await joinVC(targetVoiceChannel);
+    return i.reply(`🟢 บอทเข้าห้องเสียง <#${targetVoiceChannel.id}> แล้วค้าบ`);
   }
 
-  if (interaction.commandName === "leavevoice") {
-    const conn = getVoiceConnection(interaction.guild.id);
-    if (conn) conn.destroy();
+  if (i.commandName === "leavevoice") {
+    await leaveVC(i.guild);
     targetVoiceChannel = null;
-    return interaction.reply(`🔴 บอทออกจากห้องเสียงแล้วค้าบ`);
+    return i.reply(`🔴 ออกจาก VC แล้วค้าบ`);
   }
 
-  if (interaction.commandName === "setjoinlog") {
-    logJoinChannel = interaction.options.getChannel("channel").id;
-    return interaction.reply(`🟢 ช่องแจ้งเตือนเข้าเสียงถูกตั้งเป็น <#${logJoinChannel}>`);
+  if (i.commandName === "setjoinlog") {
+    logJoinChannel = i.options.getChannel("channel").id;
+    return i.reply(`🟢 Log เข้าเสียงใช้ <#${logJoinChannel}>`);
   }
 
-  if (interaction.commandName === "setleavelog") {
-    logLeaveChannel = interaction.options.getChannel("channel").id;
-    return interaction.reply(`🟢 ช่องแจ้งเตือนออกเสียงถูกตั้งเป็น <#${logLeaveChannel}>`);
+  if (i.commandName === "setleavelog") {
+    logLeaveChannel = i.options.getChannel("channel").id;
+    return i.reply(`🟢 Log ออกเสียงใช้ <#${logLeaveChannel}>`);
   }
 });
 
-setInterval(() => {
+setInterval(async () => {
   if (!targetVoiceChannel) return;
-  const conn = getVoiceConnection(targetVoiceChannel.guild.id);
-  if (!conn) {
-    joinVoiceChannel({
-      channelId: targetVoiceChannel.id,
-      guildId: targetVoiceChannel.guild.id,
-      adapterCreator: targetVoiceChannel.guild.voiceAdapterCreator,
-      selfDeaf: false,
-      selfMute: false
-    });
-  }
+  const me = targetVoiceChannel.guild.members.me;
+  if (!me.voice.channel) await joinVC(targetVoiceChannel);
 }, 5000);
 
 client.on("voiceStateUpdate", (oldState, newState) => {
@@ -148,28 +145,16 @@ client.on("voiceStateUpdate", (oldState, newState) => {
   if (!oldState.channelId && newState.channelId && logJoinChannel) {
     const embed = new EmbedBuilder()
       .setColor(0x00ff00)
-      .setTitle(`# 🟢 <@${user.id}> ได้เข้าห้องเสียงแล้ว`)
-      .setThumbnail("https://cdn.discordapp.com/attachments/1449115719479590984/1451221912259923989/a64f8f38ab161df88f85f035eaa12cb7.jpg")
-      .setDescription(`
-> - <a:emoji_10:1449150901628440767> <#${newState.channelId}>
-> - <a:emoji_19:1449151254189314150> ${thaiTime()}
-> - <a:emoji_34:1450185126901321892> คุยให้สนุกนะค้าบ  
-** ╭┈ ✧ : เข้าห้องเสียง ˗ˏˋ꒰ <a:emoji_2:1449148118690959440> ꒱ **
-** ╰ ┈ ✧ :xSwift Hub 🐼 ┆ • ➵ BY Zemon Źx **`);
+      .setTitle(`# 🟢 <@${user.id}> เข้า VC แล้ว`)
+      .setDescription(`> ห้อง: <#${newState.channelId}>\n> เวลา: ${thaiTime()}`);
     client.channels.cache.get(logJoinChannel)?.send({ embeds: [embed] });
   }
 
   if (oldState.channelId && !newState.channelId && logLeaveChannel) {
     const embed = new EmbedBuilder()
       .setColor(0xff0000)
-      .setTitle(`# 🔴 <@${user.id}> ได้ออกห้องเสียงแล้ว`)
-      .setThumbnail("https://cdn.discordapp.com/attachments/1449115719479590984/1451221912670830612/a9b8cf03aafc0ed58b542e03d281dd2f.jpg")
-      .setDescription(`
-> - <a:emoji_10:1449150901628440767> <#${oldState.channelId}>
-> - <a:emoji_19:1449151254189314150> ${thaiTime()}
-> - <a:emoji_34:1450185126901321892> กลับมาคุยกันใหม่ได้น้า  
-** ╭┈ ✧ : ออกห้องเสียง ˗ˏˋ꒰ <a:emoji_2:1449148118690959440> ꒱ **
-** ╰ ┈ ✧ :xSwift Hub 🐼 ┆ • ➵ BY Zemon Źx **`);
+      .setTitle(`# 🔴 <@${user.id}> ออกจาก VC แล้ว`)
+      .setDescription(`> ห้อง: <#${oldState.channelId}>\n> เวลา: ${thaiTime()}`);
     client.channels.cache.get(logLeaveChannel)?.send({ embeds: [embed] });
   }
 });
