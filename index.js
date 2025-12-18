@@ -162,28 +162,28 @@ client.on("voiceStateUpdate", (oldState, newState) => {
   if (!oldState.channelId && newState.channelId && logJoinChannel) {
     const embed = new EmbedBuilder()
       .setColor(0x00ff00)
-      .setTitle(`# 🟢 <@${user.id}> ได้เข้าห้องเสียงแล้ว`)
+      .setTitle(` ** <a:emoji_46:1451252945424351310> <@${user.id}> ได้เข้าห้องเสียงแล้ว ** `)
       .setThumbnail("https://cdn.discordapp.com/attachments/1449115719479590984/1451221912259923989/a64f8f38ab161df88f85f035eaa12cb7.jpg")
       .setDescription(`
 ** ╭┈ ✧ : เข้าห้องเสียง ˗ˏˋ꒰ <a:emoji_2:1449148118690959440> ꒱ **
 > - <a:emoji_10:1449150901628440767> <#${newState.channelId}>
 > - <a:emoji_19:1449151254189314150> ${thaiTime()}
 > - <a:emoji_34:1450185126901321892> คุยให้สนุกนะค้าบ  
-** ╰ ┈ ✧ :xSwift Hub 🐼 ┆ • ➵ BY Zemon Źx **`);
+** ╰ ┈ ✧ : <a:emoji_11:1449150928048361603> BY ┆ <a:emoji_12:1449150980179366024> • ➵ ซีม่อน **`);
     client.channels.cache.get(logJoinChannel)?.send({ embeds: [embed] });
   }
 
   if (oldState.channelId && !newState.channelId && logLeaveChannel) {
     const embed = new EmbedBuilder()
       .setColor(0xff0000)
-      .setTitle(`# 🔴 <@${user.id}> ได้ออกห้องเสียงแล้ว`)
+      .setTitle(` ** <a:emoji_46:1451253063980417075> <@${user.id}> ได้ออกห้องเสียงแล้ว ** `)
       .setThumbnail("https://cdn.discordapp.com/attachments/1449115719479590984/1451221912670830612/a9b8cf03aafc0ed58b542e03d281dd2f.jpg")
       .setDescription(`
 ** ╭┈ ✧ : ออกห้องเสียง ˗ˏˋ꒰ <a:emoji_2:1449148118690959440> ꒱ **
 > - <a:emoji_10:1449150901628440767> <#${oldState.channelId}>
 > - <a:emoji_19:1449151254189314150> ${thaiTime()}
 > - <a:emoji_34:1450185126901321892> กลับมาคุยกันใหม่ได้น้า  
-** ╰ ┈ ✧ :xSwift Hub 🐼 ┆ • ➵ BY Zemon Źx **`);
+** ╰ ┈ ✧ : <a:emoji_11:1449150928048361603> BY ┆ <a:emoji_12:1449150980179366024> • ➵ ซีม่อน **`);
     client.channels.cache.get(logLeaveChannel)?.send({ embeds: [embed] });
   }
 });
