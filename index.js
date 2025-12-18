@@ -71,47 +71,26 @@ const leaveVC = (guild) => {
 
 // =========================== SLASH COMMANDS ===========================
 const commands = [
-  new SlashCommandBuilder()
-    .setName("setupvoice")
-    .setDescription(" ")
+  new SlashCommandBuilder().setName("setupvoice").setDescription(" ")
     .addChannelOption(opt =>
-      opt.setName("voice")
-        .setDescription(" ")
-        .addChannelTypes(ChannelType.GuildVoice)
-        .setRequired(true)
+      opt.setName("voice").setDescription(" ").addChannelTypes(ChannelType.GuildVoice).setRequired(true)
     ),
 
-  new SlashCommandBuilder()
-    .setName("leavevoice")
-    .setDescription(" "),
+  new SlashCommandBuilder().setName("leavevoice").setDescription(" "),
 
-  new SlashCommandBuilder()
-    .setName("setjoinlog")
-    .setDescription(" ")
+  new SlashCommandBuilder().setName("setjoinlog").setDescription(" ")
     .addChannelOption(opt =>
-      opt.setName("channel")
-        .setDescription(" ")
-        .addChannelTypes(ChannelType.GuildText)
-        .setRequired(true)
+      opt.setName("channel").setDescription(" ").addChannelTypes(ChannelType.GuildText).setRequired(true)
     ),
 
-  new SlashCommandBuilder()
-    .setName("setleavelog")
-    .setDescription(" ")
+  new SlashCommandBuilder().setName("setleavelog").setDescription(" ")
     .addChannelOption(opt =>
-      opt.setName("channel")
-        .setDescription(" ")
-        .addChannelTypes(ChannelType.GuildText)
-        .setRequired(true)
+      opt.setName("channel").setDescription(" ").addChannelTypes(ChannelType.GuildText).setRequired(true)
     ),
 
-  new SlashCommandBuilder()
-    .setName("setserver")
-    .setDescription(" ")
+  new SlashCommandBuilder().setName("setserver").setDescription(" ")
     .addStringOption(opt =>
-      opt.setName("type")
-        .setDescription(" ")
-        .setRequired(true)
+      opt.setName("type").setDescription(" ").setRequired(true)
         .addChoices(
           { name: "ห้องแชทปกติ", value: "text" },
           { name: "ห้องเสียง", value: "voice" }
@@ -122,7 +101,6 @@ const commands = [
   .map(c => c.toJSON());
 
 // =========================== READY ===========================
-
 client.once("ready", async () => {
   console.log(`🟢 Bot Online: ${client.user.tag}`);
   const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -138,7 +116,6 @@ client.once("ready", async () => {
 });
 
 // =========================== COMMAND LOGIC ===========================
-
 client.on("interactionCreate", async i => {
   if (!i.isChatInputCommand()) return;
   if (i.user.id !== ADMIN_ID)
@@ -166,23 +143,16 @@ client.on("interactionCreate", async i => {
     return i.reply(`🟢 Log ออกเสียงใช้ <#${logLeaveChannel}>`);
   }
 
+  // CREATE SERVER STATS
   if (i.commandName === "setserver") {
     const type = i.options.getString("type");
 
-    // CREATE CATEGORY
     const category = await i.guild.channels.create({
       name: "📊・ยอดคนในเซิร์ฟ",
       type: ChannelType.GuildCategory,
       permissionOverwrites: [
-        {
-          id: i.guild.roles.everyone,
-          deny: ["Connect", "SendMessages", "ViewChannel"]
-        },
-        {
-          id: MEMBER_ROLE,
-          allow: ["ViewChannel"],
-          deny: ["SendMessages", "Connect"]
-        }
+        { id: i.guild.roles.everyone, deny: ["Connect", "SendMessages", "ViewChannel"] },
+        { id: MEMBER_ROLE, allow: ["ViewChannel"], deny: ["SendMessages", "Connect"] }
       ]
     });
 
@@ -193,16 +163,8 @@ client.on("interactionCreate", async i => {
     const base = {
       parent: category.id,
       permissionOverwrites: [
-        {
-          id: i.guild.roles.everyone,
-          allow: ["ViewChannel"],
-          deny: ["SendMessages", "Connect"]
-        },
-        {
-          id: MEMBER_ROLE,
-          allow: ["ViewChannel"],
-          deny: ["SendMessages", "Connect"]
-        }
+        { id: i.guild.roles.everyone, allow: ["ViewChannel"], deny: ["SendMessages", "Connect"] },
+        { id: MEMBER_ROLE, allow: ["ViewChannel"], deny: ["SendMessages", "Connect"] }
       ]
     };
 
@@ -218,8 +180,33 @@ client.on("interactionCreate", async i => {
   }
 });
 
-// =========================== RECONNECT ===========================
+// =========================== AUTO UPDATE EVERY 5 MIN ===========================
 
+setInterval(async () => {
+  const guild = client.guilds.cache.first();
+  if (!guild) return;
+
+  const category = guild.channels.cache.find(c =>
+    c.type === ChannelType.GuildCategory && c.name === "📊・ยอดคนในเซิร์ฟ"
+  );
+  if (!category) return;
+
+  const total = await guild.members.fetch();
+  const humans = total.filter(m => !m.user.bot).size;
+  const bots = total.filter(m => m.user.bot).size;
+
+  const channels = guild.channels.cache.filter(c => c.parentId === category.id);
+
+  const sorted = [...channels.values()].sort((a, b) => a.position - b.position);
+
+  if (sorted[0]) await sorted[0].setName(`📊・ยอดคนในเซิร์ฟ : ${humans}`).catch(() => {});
+  if (sorted[1]) await sorted[1].setName(`♻️・สมาชิก & บอท : ${humans + bots}`).catch(() => {});
+  if (sorted[2]) await sorted[2].setName(`🔥・รวมพลทั้งหมด : ${total.size}`).catch(() => {});
+
+  console.log("♻️ อัปเดตสเตตัส 5 นาทีแล้ว");
+}, 5 * 60 * 1000);
+
+// =========================== RECONNECT ===========================
 setInterval(() => {
   if (!targetVoiceChannel) return;
   const conn = getVoiceConnection(targetVoiceChannel.guild.id);
@@ -229,7 +216,6 @@ setInterval(() => {
 }, 7000);
 
 // =========================== VOICE LOGS ===========================
-
 client.on("voiceStateUpdate", (oldState, newState) => {
   const user = newState.member?.user;
   if (!user) return;
