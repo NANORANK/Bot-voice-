@@ -14,16 +14,16 @@ import {
   entersState,
   VoiceConnectionStatus
 } from "@discordjs/voice";
-import "@discordjs/opus"; // 👈 เพิ่ม opus encoder
-import sodium from "libsodium-wrappers"; // 👈 ตัวแก้ encryption
+import "@discordjs/opus";
+import sodium from "libsodium-wrappers";
 import dotenv from "dotenv";
 dotenv.config();
-
-await sodium.ready; // 👈 initial sodium
+await sodium.ready;
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const ADMIN_ID = process.env.ADMIN_ID;
 const TZ = process.env.TIMEZONE || "Asia/Bangkok";
+const MEMBER_ROLE = "1449125703487459530";
 
 let targetVoiceChannel = null;
 let logJoinChannel = null;
@@ -32,7 +32,8 @@ let logLeaveChannel = null;
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildVoiceStates
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildMembers
   ]
 });
 
@@ -44,10 +45,9 @@ function thaiTime() {
   }).format(new Date());
 }
 
-// 🟢 FIXED JOIN
 const joinVC = async (channel) => {
   try {
-    const connection = joinVoiceChannel({
+    const conn = joinVoiceChannel({
       channelId: channel.id,
       guildId: channel.guild.id,
       adapterCreator: channel.guild.voiceAdapterCreator,
@@ -55,56 +55,73 @@ const joinVC = async (channel) => {
       selfMute: false,
       debug: false
     });
-
-    // รอให้ connection stable
-    await entersState(connection, VoiceConnectionStatus.Ready, 15_000);
+    await entersState(conn, VoiceConnectionStatus.Ready, 15_000);
     console.log(`Joined VC: ${channel.id}`);
   } catch (err) {
     console.log("VC Join error:", err.message);
   }
 };
 
-const leaveVC = async (guild) => {
+const leaveVC = (guild) => {
   try {
     const conn = getVoiceConnection(guild.id);
     if (conn) conn.destroy();
   } catch {}
 };
 
+// =========================== SLASH COMMANDS ===========================
 const commands = [
   new SlashCommandBuilder()
     .setName("setupvoice")
-    .setDescription("ให้บอทเข้าห้องเสียง 24/7 แบบไม่หลุด (เฉพาะเจ้าของ)")
+    .setDescription(" ")
     .addChannelOption(opt =>
       opt.setName("voice")
-        .setDescription("เลือกห้องเสียง")
+        .setDescription(" ")
         .addChannelTypes(ChannelType.GuildVoice)
         .setRequired(true)
     ),
+
   new SlashCommandBuilder()
     .setName("leavevoice")
-    .setDescription("ให้บอทออกจากห้องเสียงทันที (เฉพาะเจ้าของ)"),
+    .setDescription(" "),
+
   new SlashCommandBuilder()
     .setName("setjoinlog")
-    .setDescription("ตั้งช่องแจ้งสมาชิกเข้า VC (เฉพาะเจ้าของ)")
+    .setDescription(" ")
     .addChannelOption(opt =>
       opt.setName("channel")
-        .setDescription("เลือกช่องข้อความ")
+        .setDescription(" ")
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true)
     ),
+
   new SlashCommandBuilder()
     .setName("setleavelog")
-    .setDescription("ตั้งช่องแจ้งสมาชิกออก VC (เฉพาะเจ้าของ)")
+    .setDescription(" ")
     .addChannelOption(opt =>
       opt.setName("channel")
-        .setDescription("เลือกช่องข้อความ")
+        .setDescription(" ")
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
+    .setName("setserver")
+    .setDescription(" ")
+    .addStringOption(opt =>
+      opt.setName("type")
+        .setDescription(" ")
+        .setRequired(true)
+        .addChoices(
+          { name: "ห้องแชทปกติ", value: "text" },
+          { name: "ห้องเสียง", value: "voice" }
+        )
     )
 ]
   .map(c => c.setDefaultMemberPermissions(PermissionFlagsBits.Administrator))
   .map(c => c.toJSON());
+
+// =========================== READY ===========================
 
 client.once("ready", async () => {
   console.log(`🟢 Bot Online: ${client.user.tag}`);
@@ -112,10 +129,15 @@ client.once("ready", async () => {
 
   for (const [gid] of client.guilds.cache) {
     try {
-      await rest.put(Routes.applicationGuildCommands(client.user.id, gid), { body: commands });
+      await rest.put(
+        Routes.applicationGuildCommands(client.user.id, gid),
+        { body: commands }
+      );
     } catch {}
   }
 });
+
+// =========================== COMMAND LOGIC ===========================
 
 client.on("interactionCreate", async i => {
   if (!i.isChatInputCommand()) return;
@@ -129,7 +151,7 @@ client.on("interactionCreate", async i => {
   }
 
   if (i.commandName === "leavevoice") {
-    await leaveVC(i.guild);
+    leaveVC(i.guild);
     targetVoiceChannel = null;
     return i.reply(`🔴 ออกจาก VC แล้วค้าบ`);
   }
@@ -143,9 +165,61 @@ client.on("interactionCreate", async i => {
     logLeaveChannel = i.options.getChannel("channel").id;
     return i.reply(`🟢 Log ออกเสียงใช้ <#${logLeaveChannel}>`);
   }
+
+  if (i.commandName === "setserver") {
+    const type = i.options.getString("type");
+
+    // CREATE CATEGORY
+    const category = await i.guild.channels.create({
+      name: "📊・ยอดคนในเซิร์ฟ",
+      type: ChannelType.GuildCategory,
+      permissionOverwrites: [
+        {
+          id: i.guild.roles.everyone,
+          deny: ["Connect", "SendMessages", "ViewChannel"]
+        },
+        {
+          id: MEMBER_ROLE,
+          allow: ["ViewChannel"],
+          deny: ["SendMessages", "Connect"]
+        }
+      ]
+    });
+
+    const total = await i.guild.members.fetch();
+    const humans = total.filter(m => !m.user.bot).size;
+    const bots = total.filter(m => m.user.bot).size;
+
+    const base = {
+      parent: category.id,
+      permissionOverwrites: [
+        {
+          id: i.guild.roles.everyone,
+          allow: ["ViewChannel"],
+          deny: ["SendMessages", "Connect"]
+        },
+        {
+          id: MEMBER_ROLE,
+          allow: ["ViewChannel"],
+          deny: ["SendMessages", "Connect"]
+        }
+      ]
+    };
+
+    const nameType = (str) => type === "voice"
+      ? { ...base, type: ChannelType.GuildVoice, name: str }
+      : { ...base, type: ChannelType.GuildText, name: str };
+
+    await i.guild.channels.create(nameType(`📊・ยอดคนในเซิร์ฟ : ${humans}`));
+    await i.guild.channels.create(nameType(`♻️・สมาชิก & บอท : ${humans + bots}`));
+    await i.guild.channels.create(nameType(`🔥・รวมพลทั้งหมด : ${total.size}`));
+
+    return i.reply(`🟢 สร้างห้องแสดงยอดแล้วค้าบ`);
+  }
 });
 
-// ♻ Reconnect loop
+// =========================== RECONNECT ===========================
+
 setInterval(() => {
   if (!targetVoiceChannel) return;
   const conn = getVoiceConnection(targetVoiceChannel.guild.id);
@@ -154,7 +228,8 @@ setInterval(() => {
   }
 }, 7000);
 
-// 🚀 Voice Logs — untouched
+// =========================== VOICE LOGS ===========================
+
 client.on("voiceStateUpdate", (oldState, newState) => {
   const user = newState.member?.user;
   if (!user) return;
