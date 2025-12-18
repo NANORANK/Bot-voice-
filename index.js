@@ -30,50 +30,47 @@ const client = new Client({
   ]
 });
 
-const thaiTime = () =>
-  new Intl.DateTimeFormat("th-TH", {
+function thaiTime() {
+  return new Intl.DateTimeFormat("th-TH", {
     dateStyle: "medium",
     timeStyle: "medium",
     timeZone: TZ
   }).format(new Date());
+}
 
 const commands = [
   new SlashCommandBuilder()
-    .setName("setupvoice")
-    .setDescription("ให้บอทเข้าห้องเสียง 24/7 แบบไม่หลุด (เฉพาะเจ้าของ)")
+    .setName("joinvoice")
+    .setDescription("ให้บอทเข้าห้องเสียงค้าง 24/7 (เฉพาะเจ้าของ)")
     .addChannelOption(opt =>
       opt.setName("voice")
-        .setDescription("เลือกห้องเสียงที่ต้องการให้บอทเข้าตลอดเวลา")
+        .setDescription("เลือกห้องเสียง")
         .addChannelTypes(ChannelType.GuildVoice)
         .setRequired(true)
     ),
 
   new SlashCommandBuilder()
-    .setName("leavevoice")
-    .setDescription("ให้บอทออกจากห้องเสียงทันที (เฉพาะเจ้าของ)"),
-
-  new SlashCommandBuilder()
-    .setName("setjoinlog")
-    .setDescription("ตั้งช่องแจ้งเตือนสมาชิกเข้าห้องเสียง (เฉพาะเจ้าของ)")
+    .setName("logjoin")
+    .setDescription("ตั้งช่อง log เวลาเข้า VC (เฉพาะเจ้าของ)")
     .addChannelOption(opt =>
       opt.setName("channel")
-        .setDescription("เลือกช่องข้อความแจ้งเตือน")
+        .setDescription("เลือกช่องข้อความ")
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true)
     ),
 
   new SlashCommandBuilder()
-    .setName("setleavelog")
-    .setDescription("ตั้งช่องแจ้งเตือนสมาชิกออกห้องเสียง (เฉพาะเจ้าของ)")
+    .setName("logleave")
+    .setDescription("ตั้งช่อง log เวลาออก VC (เฉพาะเจ้าของ)")
     .addChannelOption(opt =>
       opt.setName("channel")
-        .setDescription("เลือกช่องข้อความแจ้งเตือน")
+        .setDescription("เลือกช่องข้อความ")
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true)
     )
 ]
-  .map(cmd => cmd.setDefaultMemberPermissions(PermissionFlagsBits.Administrator))
-  .map(cmd => cmd.toJSON());
+.map(cmd => cmd.setDefaultMemberPermissions(PermissionFlagsBits.Administrator))
+.map(cmd => cmd.toJSON());
 
 client.once("ready", async () => {
   console.log(`🟢 Bot online: ${client.user.tag}`);
@@ -95,9 +92,9 @@ client.once("ready", async () => {
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
   if (interaction.user.id !== ADMIN_ID)
-    return interaction.reply({ content: "❌ ไม่อนุญาตนะคะ", ephemeral: true });
+    return interaction.reply({ content: "❌ ไม่อนุญาตใช้นะ", ephemeral: true });
 
-  if (interaction.commandName === "setupvoice") {
+  if (interaction.commandName === "joinvoice") {
     targetVoiceChannel = interaction.options.getChannel("voice");
     joinVoiceChannel({
       channelId: targetVoiceChannel.id,
@@ -106,24 +103,23 @@ client.on("interactionCreate", async (interaction) => {
       selfDeaf: false,
       selfMute: false
     });
-    return interaction.reply(`🟢 เข้าห้องเสียง <#${targetVoiceChannel.id}> ตลอด 24/7 แล้วค้าบ`);
+    return interaction.reply(
+      `🟢 บอทเข้าห้องเสียง <#${targetVoiceChannel.id}> แล้วค้าบ 24/7`
+    );
   }
 
-  if (interaction.commandName === "leavevoice") {
-    const conn = getVoiceConnection(interaction.guild.id);
-    if (conn) conn.destroy();
-    targetVoiceChannel = null;
-    return interaction.reply(`🔴 บอทออกจากห้องเสียงแล้วค้าบ`);
-  }
-
-  if (interaction.commandName === "setjoinlog") {
+  if (interaction.commandName === "logjoin") {
     logJoinChannel = interaction.options.getChannel("channel").id;
-    return interaction.reply(`🟢 ตั้งช่องแจ้งเตือนเข้าเสียงเป็น <#${logJoinChannel}>`);
+    return interaction.reply(
+      `🟢 Log เข้าเสียงจะถูกส่งไปที่ <#${logJoinChannel}>`
+    );
   }
 
-  if (interaction.commandName === "setleavelog") {
+  if (interaction.commandName === "logleave") {
     logLeaveChannel = interaction.options.getChannel("channel").id;
-    return interaction.reply(`🟢 ตั้งช่องแจ้งเตือนออกเสียงเป็น <#${logLeaveChannel}>`);
+    return interaction.reply(
+      `🟢 Log ออกเสียงจะถูกส่งไปที่ <#${logLeaveChannel}>`
+    );
   }
 });
 
@@ -131,13 +127,13 @@ setInterval(() => {
   if (!targetVoiceChannel) return;
   const conn = getVoiceConnection(targetVoiceChannel.guild.id);
   if (!conn) {
-    joinVoiceChannel({
-      channelId: targetVoiceChannel.id,
-      guildId: targetVoiceChannel.guild.id,
-      adapterCreator: targetVoiceChannel.guild.voiceAdapterCreator,
-      selfDeaf: false,
-      selfMute: false
-    });
+    try {
+      joinVoiceChannel({
+        channelId: targetVoiceChannel.id,
+        guildId: targetVoiceChannel.guild.id,
+        adapterCreator: targetVoiceChannel.guild.voiceAdapterCreator,
+      });
+    } catch (err) {}
   }
 }, 5000);
 
@@ -148,7 +144,9 @@ client.on("voiceStateUpdate", (oldState, newState) => {
     const embed = new EmbedBuilder()
       .setColor(0x00ff00)
       .setTitle(`# 🟢 <@${user.id}> ได้เข้าห้องเสียงแล้ว`)
-      .setThumbnail("https://cdn.discordapp.com/attachments/1449115719479590984/1451221912259923989/a64f8f38ab161df88f85f035eaa12cb7.jpg")
+      .setThumbnail(
+        "https://cdn.discordapp.com/attachments/1449115719479590984/1451221912259923989/a64f8f38ab161df88f85f035eaa12cb7.jpg"
+      )
       .setDescription(`
 > - <a:emoji_10:1449150901628440767> <#${newState.channelId}>
 > - <a:emoji_19:1449151254189314150> ${thaiTime()}
@@ -162,11 +160,13 @@ client.on("voiceStateUpdate", (oldState, newState) => {
     const embed = new EmbedBuilder()
       .setColor(0xff0000)
       .setTitle(`# 🔴 <@${user.id}> ได้ออกห้องเสียงแล้ว`)
-      .setThumbnail("https://cdn.discordapp.com/attachments/1449115719479590984/1451221912670830612/a9b8cf03aafc0ed58b542e03d281dd2f.jpg")
+      .setThumbnail(
+        "https://cdn.discordapp.com/attachments/1449115719479590984/1451221912670830612/a9b8cf03aafc0ed58b542e03d281dd2f.jpg"
+      )
       .setDescription(`
 > - <a:emoji_10:1449150901628440767> <#${oldState.channelId}>
 > - <a:emoji_19:1449151254189314150> ${thaiTime()}
-> - <a:emoji_34:1450185126901321892> กลับมาคุยกันใหม่นะ  
+> - <a:emoji_34:1450185126901321892> กลับมาพูดคุยใหม่ได้น้า  
 ** ╭┈ ✧ : ออกห้องเสียง ˗ˏˋ꒰ <a:emoji_2:1449148118690959440> ꒱ **
 ** ╰ ┈ ✧ :xSwift Hub 🐼 ┆ • ➵ BY Zemon Źx **`);
     client.channels.cache.get(logLeaveChannel)?.send({ embeds: [embed] });
